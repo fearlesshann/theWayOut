@@ -1,0 +1,7 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: 'concurrency-demo'
+    static_configs:
+      - targets: ['concurrency-demo:8080']
