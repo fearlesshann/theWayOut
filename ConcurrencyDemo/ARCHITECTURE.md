@@ -78,3 +78,42 @@ graph TD
 3.  **Response**: API 立即返回给用户（低延迟）。
 4.  **Async**: 扣减成功的消息被丢入 Channel。
 5.  **Persist**: 后台线程批量获取消息 -> Redis 去重 -> 合并 SQL -> 写入 SQLite。
+
+## 知识点思维导图
+
+```mermaid
+mindmap
+  root((秒杀系统架构))
+    核心机制
+      Redis Lua脚本
+        原子性保障
+        减少网络RTT
+      异步削峰
+        Channel 内存缓冲
+        批量写入 SQLite
+    可靠性保障
+      幂等性 (Idempotency)
+        Redis SETNX 去重
+        防止消息重复消费
+      健康检查
+        Redis 连接探针
+        HealthChecks UI
+    性能调优
+      Release 模式
+        JIT 优化
+      日志降级
+        消除 Console IO 瓶颈
+        结构化日志
+      数据预热
+        Redis 缓存预加载
+    工程化
+      容器化
+        Dockerfile (Multi-stage)
+        Docker Compose
+      压测体系
+        k6 脚本化压测
+        TPS/Latency 监控
+    可观测性
+      Prometheus Metrics
+      Grafana 可视化
+```
