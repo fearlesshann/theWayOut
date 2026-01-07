@@ -28,8 +28,9 @@ namespace ConcurrencyDemo
             // 给其他服务一点启动时间
             await Task.Delay(1000, stoppingToken);
 
-            _logger.LogInformation("初始化 Redis 库存: 10");
-            await _stockService.InitializeStockAsync(10);
+            // 性能测试：初始库存 100000
+            _logger.LogInformation("初始化 Redis 库存: 100000");
+            await _stockService.InitializeStockAsync(100000);
 
             _logger.LogInformation("开始模拟 100 个并发 Task...");
             var tasks = new List<Task>();

@@ -1,0 +1,35 @@
+## .NET Core
+bin/
+obj/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+.vs/
+*.nupkg
+*.snupkg
+
+## Visual Studio Code
+.vscode/
+# 保留必要的 VS Code 配置（可选）
+# !.vscode/settings.json
+# !.vscode/tasks.json
+# !.vscode/launch.json
+# !.vscode/extensions.json
+
+## SQLite
+*.db
+*.db-shm
+*.db-wal
+
+## Logs
+*.log
+
+## k6 (Local artifacts)
+k6.exe
+k6.zip
+k6_temp/
+
+## OS
+.DS_Store
+Thumbs.db

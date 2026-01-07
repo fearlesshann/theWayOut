@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "EU2YOTC1Qz4=",
+  "dgSpecHash": "8cxE6W1Iz3M=",
   "success": true,
-  "projectFilePath": "c:\\Users\\fearless\\Documents\\trae_projects\\theWayOut\\ConcurrencyDemo\\ConcurrencyDemo.csproj",
+  "projectFilePath": "C:\\Users\\fearless\\Documents\\trae_projects\\theWayOut\\ConcurrencyDemo\\ConcurrencyDemo.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\fearless\\.nuget\\packages\\aspnetcore.healthchecks.redis\\8.0.0\\aspnetcore.healthchecks.redis.8.0.0.nupkg.sha512",
     "C:\\Users\\fearless\\.nuget\\packages\\microsoft.data.sqlite\\9.0.0\\microsoft.data.sqlite.9.0.0.nupkg.sha512",
