@@ -4,15 +4,32 @@ using StackExchange.Redis;
 
 namespace ConcurrencyDemo
 {
+    /// <summary>
+    /// 基于 Redis Lua 脚本的库存扣减服务。
+    /// <para>
+    /// 核心职责：利用 Redis 的单线程特性和 Lua 脚本原子性，实现高性能、无锁的库存扣减。
+    /// 这是秒杀系统的“抗压层”，能够处理数万 TPS 的并发请求。
+    /// </para>
+    /// </summary>
     public class RedisLuaStock
     {
         private readonly IDatabase _db;
         private const string StockKey = "material:stock:1";
 
-        // Lua 脚本：原子性检查并扣减库存
-        // KEYS[1]: 库存 Key
-        // ARGV[1]: 扣减数量
-        // 返回值: 1 成功, -1 库存不足
+        /// <summary>
+        /// 原子扣减脚本。
+        /// <para>
+        /// 逻辑：
+        /// 1. 检查库存是否存在且大于请求数量 (deductQty)。
+        /// 2. 如果满足，执行 DECRBY 扣减。
+        /// 3. 返回 1 (成功) 或 -1 (失败)。
+        /// </para>
+        /// <para>
+        /// 为什么用 Lua？
+        /// Redis 会将整个脚本作为一个原子操作执行，期间不会插入其他命令。
+        /// 这避免了 "Check-Then-Act" 造成的竞态条件 (Race Condition)。
+        /// </para>
+        /// </summary>
         private const string DeductScript = @"
             local stockKey = KEYS[1]
             local deductQty = tonumber(ARGV[1])
@@ -35,12 +52,21 @@ namespace ConcurrencyDemo
             _db = db;
         }
 
+        /// <summary>
+        /// 初始化/重置库存。
+        /// </summary>
+        /// <param name="qty">初始库存数量</param>
         public async Task InitializeStockAsync(int qty)
         {
             // 初始化 Redis 库存
             await _db.StringSetAsync(StockKey, qty);
         }
 
+        /// <summary>
+        /// 尝试扣减库存。
+        /// </summary>
+        /// <param name="qty">扣减数量</param>
+        /// <returns>true: 扣减成功; false: 库存不足</returns>
         public async Task<bool> DeductStockAsync(int qty)
         {
             // 执行 Lua 脚本

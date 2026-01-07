@@ -1,26 +1,36 @@
 services:
+  # ==========================================
+  # 核心业务服务 (ASP.NET Core)
+  # ==========================================
   concurrency-demo:
     build: .
     container_name: concurrency-demo
     environment:
       - REDIS_HOST=redis
-      # 生产环境日志级别，避免控制台 IO 瓶颈
+      # 性能优化：生产环境日志级别设为 Warning，避免控制台 IO 成为瓶颈
       - Serilog__MinimumLevel=Warning 
     ports:
       # 映射到宿主机 5001，避免与常见的 5000 冲突
       - "5001:8080" 
     depends_on:
       redis:
-        condition: service_healthy # 关键：等待 Redis 就绪
+        # 强依赖：必须等待 Redis 健康检查通过后才启动 App
+        # 这解决了 "RedisConnectionException: ConnectTimeout" 的启动竞态问题
+        condition: service_healthy 
     networks:
       - monitoring
 
+  # ==========================================
+  # 基础设施 (Redis)
+  # ==========================================
   redis:
     image: redis:alpine
     container_name: redis
     ports:
       - "6379:6379"
-    # 健康检查：每 5s ping 一次，确保 Redis 已启动
+    # 健康检查机制：
+    # 每 5s 执行一次 redis-cli ping
+    # 连续成功后标记为 healthy，App 才会启动
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -29,21 +39,29 @@ services:
     networks:
       - monitoring
 
-  # 压测工具 (按需运行)
-  # 运行命令: docker-compose run --rm k6
+  # ==========================================
+  # 压测工具 (k6)
+  # ==========================================
+  # 这是一个 "One-off" 任务容器，不会随 docker-compose up 自动启动。
+  # 使用方法: docker-compose run --rm k6
   k6:
     image: grafana/k6
     container_name: k6
     volumes:
+      # 挂载当前目录，以便读取 loadtest.js
       - ./:/app
     environment:
-      # 容器间通信走内部端口 8080
+      # 容器间通信走 Docker 内部网络，直接访问服务名 concurrency-demo
       - BASE_URL=http://concurrency-demo:8080 
     command: run /app/loadtest.js
     networks:
       - monitoring
-    profiles: ["tools"] # 不会随 docker-compose up 自动启动
+    # profiles: ["tools"] 表示此服务仅在显式指定时运行
+    profiles: ["tools"] 
 
+  # ==========================================
+  # 可观测性 (Prometheus + Grafana)
+  # ==========================================
   prometheus:
     image: prom/prometheus
     container_name: prometheus
