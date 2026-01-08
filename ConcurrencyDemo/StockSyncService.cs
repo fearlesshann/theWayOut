@@ -32,7 +32,7 @@ namespace ConcurrencyDemo
         private readonly string _connectionString;
         private readonly IDatabase _redisDb;
         private readonly IConnection _rabbitConnection;
-        private IModel _rabbitChannel;
+        private IModel _rabbitChannel = null!;
         private readonly ILogger<StockSyncService> _logger;
 
         private const string QueueName = "stock_deduct_queue";
