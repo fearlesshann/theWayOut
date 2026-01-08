@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\fearless\\Documents\\trae_projects\\theWayOut\\ConcurrencyDemo\\ConcurrencyDemo.csproj": {}
+    "c:\\Users\\fearless\\Documents\\trae_projects\\theWayOut\\ConcurrencyDemo\\ConcurrencyDemo.csproj": {}
   },
   "projects": {
-    "C:\\Users\\fearless\\Documents\\trae_projects\\theWayOut\\ConcurrencyDemo\\ConcurrencyDemo.csproj": {
+    "c:\\Users\\fearless\\Documents\\trae_projects\\theWayOut\\ConcurrencyDemo\\ConcurrencyDemo.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\fearless\\Documents\\trae_projects\\theWayOut\\ConcurrencyDemo\\ConcurrencyDemo.csproj",
+        "projectUniqueName": "c:\\Users\\fearless\\Documents\\trae_projects\\theWayOut\\ConcurrencyDemo\\ConcurrencyDemo.csproj",
         "projectName": "ConcurrencyDemo",
-        "projectPath": "C:\\Users\\fearless\\Documents\\trae_projects\\theWayOut\\ConcurrencyDemo\\ConcurrencyDemo.csproj",
+        "projectPath": "c:\\Users\\fearless\\Documents\\trae_projects\\theWayOut\\ConcurrencyDemo\\ConcurrencyDemo.csproj",
         "packagesPath": "C:\\Users\\fearless\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\fearless\\Documents\\trae_projects\\theWayOut\\ConcurrencyDemo\\obj\\",
+        "outputPath": "c:\\Users\\fearless\\Documents\\trae_projects\\theWayOut\\ConcurrencyDemo\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -57,6 +57,10 @@
             "Microsoft.Data.Sqlite": {
               "target": "Package",
               "version": "[9.0.0, )"
+            },
+            "RabbitMQ.Client": {
+              "target": "Package",
+              "version": "[6.8.1, )"
             },
             "Serilog.AspNetCore": {
               "target": "Package",

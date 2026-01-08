@@ -6,17 +6,40 @@ services:
     build: .
     container_name: concurrency-demo
     environment:
-      - REDIS_HOST=redis
-      # 性能优化：生产环境日志级别设为 Warning，避免控制台 IO 成为瓶颈
-      - Serilog__MinimumLevel=Warning 
+      # 覆盖 appsettings.json 中的 ConnectionStrings:Redis
+      - ConnectionStrings__Redis=redis:6379,abortConnect=false
+      # 覆盖 appsettings.json 中的 RabbitMQ 配置
+      - RabbitMQ__HostName=rabbitmq
+      # 性能优化：生产环境日志级别设为 Warning
+      - Logging__LogLevel__Default=Warning 
     ports:
       # 映射到宿主机 5001，避免与常见的 5000 冲突
       - "5001:8080" 
     depends_on:
       redis:
-        # 强依赖：必须等待 Redis 健康检查通过后才启动 App
-        # 这解决了 "RedisConnectionException: ConnectTimeout" 的启动竞态问题
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy 
+    networks:
+      - monitoring
+
+  # ==========================================
+  # 消息队列 (RabbitMQ)
+  # ==========================================
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"   # AMQP 协议端口
+      - "15672:15672" # 管理界面端口
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - monitoring
 

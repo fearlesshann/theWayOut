@@ -3,6 +3,7 @@ using Microsoft.Data.Sqlite;
 using Prometheus;
 using Serilog;
 using StackExchange.Redis;
+using RabbitMQ.Client;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,16 +14,14 @@ var builder = WebApplication.CreateBuilder(args);
 // 配置 Serilog
 // 关键优化：将 MinimumLevel 设为 Warning 以减少控制台 IO，这在高并发场景下是巨大的性能瓶颈。
 Log.Logger = new LoggerConfiguration()
-    .MinimumLevel.Warning() 
+    .ReadFrom.Configuration(builder.Configuration) // 从 appsettings.json 读取配置
     .WriteTo.Console()
     .CreateLogger();
 builder.Host.UseSerilog();
 
 // Redis 连接配置
-// 支持通过环境变量覆盖 Redis 地址 (Docker Compose 中使用 'redis'，本地使用 'localhost')
-var redisHost = Environment.GetEnvironmentVariable("REDIS_HOST") ?? "localhost";
-// abortConnect=false: 允许在 Redis 暂时不可用时启动应用（依赖 HealthCheck 确保最终可用）
-var redisConnStr = $"{redisHost}:6379,abortConnect=false"; 
+// 优先从 Configuration 读取，支持环境变量覆盖 (ConnectionStrings__Redis)
+var redisConnStr = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379,abortConnect=false";
 
 Log.Information("正在连接 Redis: {RedisConnStr}", redisConnStr);
 
@@ -34,6 +33,21 @@ Log.Information("正在连接 Redis: {RedisConnStr}", redisConnStr);
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp => 
     ConnectionMultiplexer.Connect(redisConnStr));
 
+// 注册 RabbitMQ 连接 (单例)
+builder.Services.AddSingleton<IConnection>(sp => 
+{
+    var config = builder.Configuration.GetSection("RabbitMQ");
+    var factory = new ConnectionFactory() 
+    { 
+        HostName = config["HostName"] ?? "rabbitmq", 
+        Port = int.Parse(config["Port"] ?? "5672"),
+        UserName = config["UserName"] ?? "guest",
+        Password = config["Password"] ?? "guest",
+        DispatchConsumersAsync = true // 允许异步消费者
+    };
+    return factory.CreateConnection();
+});
+
 // 注册 IDatabase (RedisLuaStock 依赖此接口)
 builder.Services.AddSingleton<IDatabase>(sp => 
     sp.GetRequiredService<IConnectionMultiplexer>().GetDatabase());
@@ -44,7 +58,7 @@ builder.Services.AddHealthChecks()
     .AddRedis(redisConnStr, name: "redis", tags: new[] { "ready" });
 
 // 数据库连接字符串 (SQLite)
-var dbConnStr = "Data Source=stock.db";
+var dbConnStr = builder.Configuration.GetConnectionString("Sqlite") ?? "Data Source=stock.db";
 InitializeDatabase(dbConnStr); // 应用启动时初始化 SQLite 表结构和数据
 
 // 注册核心业务服务
@@ -52,6 +66,7 @@ InitializeDatabase(dbConnStr); // 应用启动时初始化 SQLite 表结构和�
 builder.Services.AddSingleton(sp => new StockSyncService(
     dbConnStr, 
     sp.GetRequiredService<IConnectionMultiplexer>(), 
+    sp.GetRequiredService<IConnection>(), // 注入 RabbitMQ 连接
     sp.GetRequiredService<ILogger<StockSyncService>>()));
 
 builder.Services.AddHostedService(sp => sp.GetRequiredService<StockSyncService>());
