@@ -1,5 +1,5 @@
 ﻿using ConcurrencyDemo;
-using Microsoft.Data.Sqlite;
+using Microsoft.Data.SqlClient;
 using Prometheus;
 using Serilog;
 using StackExchange.Redis;
@@ -57,9 +57,11 @@ builder.Services.AddSingleton<IDatabase>(sp =>
 builder.Services.AddHealthChecks()
     .AddRedis(redisConnStr, name: "redis", tags: new[] { "ready" });
 
-// 数据库连接字符串 (SQLite)
-var dbConnStr = builder.Configuration.GetConnectionString("Sqlite") ?? "Data Source=stock.db";
-InitializeDatabase(dbConnStr); // 应用启动时初始化 SQLite 表结构和数据
+// 数据库连接字符串 (SQL Server)
+var dbConnStr = builder.Configuration.GetConnectionString("SqlServer") 
+    ?? "Server=localhost;Database=StockDb;User Id=sa;Password=YourStrong@Password;TrustServerCertificate=True;";
+    
+InitializeDatabase(dbConnStr); // 应用启动时初始化 SQL Server 表结构和数据
 
 // 注册核心业务服务
 // StockSyncService 既作为单例被注入(用于 Enqueue)，又作为后台服务运行(用于 Consume)
@@ -109,6 +111,41 @@ app.MapPost("/api/deduct", async (RedisLuaStock stockService, StockSyncService s
     return Results.BadRequest(new { success = false, message = "库存不足" });
 });
 
+// 增加库存 API
+app.MapPost("/api/add", async (RedisLuaStock stockService, StockSyncService syncService) =>
+{
+    // 硬编码 ID=1, Qty=1 用于测试
+    int id = 1;
+    int qty = 1;
+
+    // 1. Redis 增加库存
+    await stockService.AddStockAsync(qty);
+    
+    // 2. 异步队列同步 (传入负数表示反向扣减 = 增加)
+    string tid = Guid.NewGuid().ToString("N");
+    syncService.Enqueue(id, -qty, tid);
+    
+    return Results.Ok(new { success = true, tid });
+});
+
+// Redis 预热逻辑：将数据库中的库存同步到 Redis
+// 必须在 Run() 之前执行，确保流量进来前缓存已就绪
+using (var scope = app.Services.CreateScope())
+{
+    try 
+    {
+        var redisStock = scope.ServiceProvider.GetRequiredService<RedisLuaStock>();
+        // 这里硬编码 100000 与 InitializeDatabase 保持一致
+        // 生产环境应从数据库读取真实库存: var qty = dbContext.Stocks.Find(1).Qty;
+        await redisStock.InitializeStockAsync(100000); 
+        Log.Information("Redis 库存预热完成: Key=material:stock:1, Qty=100000");
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "Redis 库存预热失败");
+    }
+}
+
 try
 {
     Log.Information("应用启动中...");
@@ -124,26 +161,57 @@ finally
 }
 
 /// <summary>
-/// 初始化 SQLite 数据库。
+/// 初始化 SQL Server 数据库。
 /// </summary>
 void InitializeDatabase(string connStr)
 {
-    try 
+    int retries = 20; // 增加重试次数，SQL Server 启动较慢
+    while (retries > 0)
     {
-        using var connection = new SqliteConnection(connStr);
-        connection.Open();
-        var command = connection.CreateCommand();
-        command.CommandText = "DROP TABLE IF EXISTS MaterialStock";
-        command.ExecuteNonQuery();
-        command.CommandText = "CREATE TABLE MaterialStock (Id INTEGER PRIMARY KEY, Qty INTEGER)";
-        command.ExecuteNonQuery();
-        // 性能测试：初始库存 100000
-        command.CommandText = "INSERT INTO MaterialStock (Id, Qty) VALUES (1, 100000)";
-        command.ExecuteNonQuery();
-        Log.Information("SQLite 数据库初始化完成");
+        try 
+        {
+            // 1. 解析连接字符串，连接 master 创建数据库
+            var builder = new SqlConnectionStringBuilder(connStr);
+            string dbName = builder.InitialCatalog;
+            builder.InitialCatalog = "master"; // 先连 master
+            
+            using (var masterConn = new SqlConnection(builder.ConnectionString))
+            {
+                masterConn.Open();
+                var cmd = masterConn.CreateCommand();
+                cmd.CommandText = $"IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = N'{dbName}') CREATE DATABASE [{dbName}]";
+                cmd.ExecuteNonQuery();
+            }
+
+            // 2. 连接业务数据库创建表
+            using var connection = new SqlConnection(connStr);
+            connection.Open();
+            var command = connection.CreateCommand();
+            
+            command.CommandText = @"
+                IF OBJECT_ID('dbo.MaterialStock', 'U') IS NOT NULL DROP TABLE dbo.MaterialStock;
+                CREATE TABLE dbo.MaterialStock (Id INT PRIMARY KEY, Qty INT);
+                
+                IF OBJECT_ID('dbo.ProcessedTransactions', 'U') IS NOT NULL DROP TABLE dbo.ProcessedTransactions;
+                CREATE TABLE dbo.ProcessedTransactions (TransactionId NVARCHAR(50) PRIMARY KEY);
+                
+                INSERT INTO dbo.MaterialStock (Id, Qty) VALUES (1, 100000);
+            ";
+            command.ExecuteNonQuery();
+            Log.Information("SQL Server 数据库初始化完成");
+            return;
+        }
+        catch (SqlException ex)
+        {
+            retries--;
+            Log.Warning("SQL Server 连接失败，正在重试 ({Retries})... 错误: {Message}", retries, ex.Message);
+            Thread.Sleep(3000);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "SQL Server 初始化发生未知错误");
+            throw;
+        }
     }
-    catch (Exception ex)
-    {
-        Log.Error(ex, "SQLite 初始化失败");
-    }
+    throw new Exception("无法连接到 SQL Server，初始化失败");
 }

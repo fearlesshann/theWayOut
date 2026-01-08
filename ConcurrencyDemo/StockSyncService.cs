@@ -5,7 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
-using Microsoft.Data.Sqlite;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Prometheus;
@@ -41,6 +41,11 @@ namespace ConcurrencyDemo
         private static readonly Counter StockConsumedTotal = Metrics.CreateCounter(
             "stock_consumed_total", 
             "Total amount of stock deducted from database", 
+            new CounterConfiguration { LabelNames = new[] { "material_id" } });
+
+        private static readonly Counter StockAddedTotal = Metrics.CreateCounter(
+            "stock_added_total", 
+            "Total amount of stock added to database", 
             new CounterConfiguration { LabelNames = new[] { "material_id" } });
 
         private static readonly Counter StockWriteErrorsTotal = Metrics.CreateCounter(
@@ -181,65 +186,119 @@ namespace ConcurrencyDemo
 
                 if (pendingItems.Count == 0) continue;
 
-                // 3. 幂等性检查 (Redis Pipeline)
-                // 使用 Redis SETNX (Set if Not Exists) 批量检查 TransactionId 是否已处理
-                var tasks = new List<Task<bool>>();
-                
-                // 使用 Pipeline 提高性能
-                var batch = _redisDb.CreateBatch();
-                foreach (var item in pendingItems)
-                {
-                    string key = $"processed:tid:{item.TransactionId}";
-                    tasks.Add(batch.StringSetAsync(key, "1", TimeSpan.FromHours(24), When.NotExists));
-                }
-                batch.Execute();
-                
-                var results = await Task.WhenAll(tasks);
-
-                // 4. 合并扣减请求 & 筛选有效请求
-                // 即使是重复消息，也需要包含在 pendingItems 里以便最后 Ack，但不计入 validBatch
-                for (int i = 0; i < pendingItems.Count; i++)
-                {
-                    if (results[i]) // Set 成功，说明是新消息
-                    {
-                        var item = pendingItems[i];
-                        if (validBatch.ContainsKey(item.Id))
-                            validBatch[item.Id] += item.Qty;
-                        else
-                            validBatch[item.Id] = item.Qty;
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Duplicate transaction detected: {Tid}", pendingItems[i].TransactionId);
-                    }
-                }
-
-                // 5. 批量写入 SQLite
+                // 3. 幂等性检查 & 批量写入 (基于 SQL Server 本地事务表)
+                // 放弃 Redis 去重，改用 DB 强一致性去重，防止 Redis 写成功但 DB 写失败导致的消息丢失
                 bool dbSuccess = true;
-                if (validBatch.Count > 0)
+                if (pendingItems.Count > 0)
                 {
-                    using var connection = new SqliteConnection(_connectionString);
+                    using var connection = new SqlConnection(_connectionString);
                     await connection.OpenAsync(stoppingToken);
                     using var transaction = connection.BeginTransaction();
 
                     try
                     {
-                        foreach (var kvp in validBatch)
+                        // 3.1 筛选出新消息
+                        // 查询已存在的 TransactionId
+                        var tids = pendingItems.Select(x => x.TransactionId).ToList();
+                        var existingTids = new HashSet<string>();
+                        
+                        // 构建 IN 查询
+                        var commandCheck = connection.CreateCommand();
+                        commandCheck.Transaction = transaction;
+                        var paramNames = new List<string>();
+                        for (int i = 0; i < tids.Count; i++)
                         {
-                            var command = connection.CreateCommand();
-                            command.CommandText = "UPDATE MaterialStock SET Qty = Qty - $qty WHERE Id = $id";
-                            command.Parameters.AddWithValue("$qty", kvp.Value);
-                            command.Parameters.AddWithValue("$id", kvp.Key);
-                            await command.ExecuteNonQueryAsync(stoppingToken);
-                            
-                            StockConsumedTotal.WithLabels(kvp.Key.ToString()).Inc(kvp.Value);
+                            string pName = $"@p{i}";
+                            paramNames.Add(pName);
+                            commandCheck.Parameters.AddWithValue(pName, tids[i]);
+                        }
+                        commandCheck.CommandText = $"SELECT TransactionId FROM ProcessedTransactions WHERE TransactionId IN ({string.Join(",", paramNames)})";
+                        
+                        using (var reader = await commandCheck.ExecuteReaderAsync(stoppingToken))
+                        {
+                            while (await reader.ReadAsync(stoppingToken))
+                            {
+                                existingTids.Add(reader.GetString(0));
+                            }
+                        }
+
+                        // 3.2 记录新消息的 TransactionId 并聚合扣减量
+                        validBatch.Clear();
+                        var newItems = new List<(int Id, int Qty, string TransactionId)>();
+                        var currentBatchTids = new HashSet<string>(); // 用于本批次内去重
+
+                        foreach (var item in pendingItems)
+                        {
+                            // 1. 检查是否在数据库已存在
+                            if (existingTids.Contains(item.TransactionId))
+                            {
+                                _logger.LogWarning("Duplicate transaction detected (DB): {Tid}", item.TransactionId);
+                                continue;
+                            }
+
+                            // 2. 检查是否在本批次已处理 (防止 RabbitMQ 推送重复消息在同一批次中)
+                            if (currentBatchTids.Contains(item.TransactionId))
+                            {
+                                _logger.LogWarning("Duplicate transaction detected (Batch): {Tid}", item.TransactionId);
+                                continue;
+                            }
+
+                            currentBatchTids.Add(item.TransactionId);
+                            newItems.Add((item.Id, item.Qty, item.TransactionId));
+
+                            // 聚合库存扣减
+                            if (validBatch.ContainsKey(item.Id))
+                                validBatch[item.Id] += item.Qty;
+                            else
+                                validBatch[item.Id] = item.Qty;
+                        }
+
+                        // 3.3 批量插入新 Tid (防止下次重复)
+                        if (newItems.Count > 0)
+                        {
+                            foreach (var item in newItems)
+                            {
+                                var cmdInsert = connection.CreateCommand();
+                                cmdInsert.Transaction = transaction;
+                                cmdInsert.CommandText = "INSERT INTO ProcessedTransactions (TransactionId) VALUES (@tid)";
+                                cmdInsert.Parameters.AddWithValue("@tid", item.TransactionId);
+                                await cmdInsert.ExecuteNonQueryAsync(stoppingToken);
+                            }
+
+                            // 3.4 批量更新库存
+                            foreach (var kvp in validBatch)
+                            {
+                                var cmdUpdate = connection.CreateCommand();
+                                cmdUpdate.Transaction = transaction;
+                                // 增加 Qty >= @qty 检查，防止负库存
+                                cmdUpdate.CommandText = "UPDATE MaterialStock SET Qty = Qty - @qty WHERE Id = @id AND Qty >= @qty";
+                                cmdUpdate.Parameters.AddWithValue("@qty", kvp.Value);
+                                cmdUpdate.Parameters.AddWithValue("@id", kvp.Key);
+                                int rows = await cmdUpdate.ExecuteNonQueryAsync(stoppingToken);
+                                
+                                if (rows > 0)
+                                {
+                                    if (kvp.Value > 0)
+                                        StockConsumedTotal.WithLabels(kvp.Key.ToString()).Inc(kvp.Value);
+                                    else if (kvp.Value < 0)
+                                        StockAddedTotal.WithLabels(kvp.Key.ToString()).Inc(-kvp.Value);
+                                }
+                                else
+                                {
+                                    _logger.LogError("Stock update failed (Insufficient stock or ID not found): Id={Id}, Qty={Qty}", kvp.Key, kvp.Value);
+                                    // 这里可以选择抛出异常回滚，或者仅记录错误（取决于业务策略）
+                                    // 在秒杀场景下，如果 DB 库存不足，通常意味着 Redis 和 DB 不一致，或者超卖。
+                                    // 由于我们依赖 Redis 挡住了大部分请求，这里失败说明 Redis 放进来了但 DB 没了。
+                                    // 记录错误即可，不回滚 Tid，否则下次还会重试并失败。
+                                }
+                            }
                         }
 
                         await transaction.CommitAsync(stoppingToken);
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Batch DB write failed");
+                        _logger.LogError(ex, "Batch DB transaction failed");
                         StockWriteErrorsTotal.Inc();
                         dbSuccess = false;
                     }

@@ -10,16 +10,40 @@ services:
       - ConnectionStrings__Redis=redis:6379,abortConnect=false
       # 覆盖 appsettings.json 中的 RabbitMQ 配置
       - RabbitMQ__HostName=rabbitmq
+      # SQL Server 连接字符串
+      - ConnectionStrings__SqlServer=Server=sqlserver;Database=StockDb;User Id=sa;Password=YourStrong@Password;TrustServerCertificate=True;
       # 性能优化：生产环境日志级别设为 Warning
       - Logging__LogLevel__Default=Warning 
     ports:
-      # 映射到宿主机 5001，避免与常见的 5000 冲突
-      - "5001:8080" 
+      # 映射到宿主机 8080，方便直接访问
+      - "8080:8080" 
     depends_on:
       redis:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy 
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - monitoring
+
+  # ==========================================
+  # 数据库 (SQL Server)
+  # ==========================================
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sqlserver
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=YourStrong@Password
+    ports:
+      - "1433:1433"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P YourStrong@Password -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      retries: 10
+      start_period: 10s
+      timeout: 3s
     networks:
       - monitoring
 

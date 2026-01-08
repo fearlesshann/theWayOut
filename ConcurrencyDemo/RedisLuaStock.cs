@@ -79,6 +79,15 @@ namespace ConcurrencyDemo
 
             return (int)result == 1;
         }
+
+        /// <summary>
+        /// 增加库存。
+        /// </summary>
+        /// <param name="qty">增加数量</param>
+        public async Task AddStockAsync(int qty)
+        {
+            await _db.StringIncrementAsync(StockKey, qty);
+        }
         
         // ----------------- 架构师思考：关于“Redis 扣减成功但程序崩溃”的数据一致性问题 -----------------
         /*

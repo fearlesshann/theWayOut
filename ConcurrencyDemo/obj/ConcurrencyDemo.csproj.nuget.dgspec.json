@@ -54,9 +54,9 @@
               "target": "Package",
               "version": "[8.0.0, )"
             },
-            "Microsoft.Data.Sqlite": {
+            "Microsoft.Data.SqlClient": {
               "target": "Package",
-              "version": "[9.0.0, )"
+              "version": "[5.1.5, )"
             },
             "RabbitMQ.Client": {
               "target": "Package",
