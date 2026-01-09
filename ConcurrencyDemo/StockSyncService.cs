@@ -20,7 +20,7 @@ namespace ConcurrencyDemo
     /// <para>
     /// 核心职责：
     /// 1. [生产者] 接收 API 请求，将扣减消息发布到 RabbitMQ。
-    /// 2. [消费者] 监听 RabbitMQ，通过内存 Channel 缓冲，实现批量写入 SQLite。
+    /// 2. [消费者] 监听 RabbitMQ，通过内存 Channel 缓冲，实现批量写入 SQL Server。
     /// </para>
     /// </summary>
     public class StockSyncService : BackgroundService
@@ -62,8 +62,14 @@ namespace ConcurrencyDemo
             _redisDb = redis.GetDatabase();
             _rabbitConnection = rabbitConnection;
             _logger = logger;
-            // Unbounded channel for internal buffering
-            _channel = Channel.CreateUnbounded<(int, int, string, ulong)>();
+            // Bounded channel for internal buffering to apply backpressure
+            var channelOptions = new BoundedChannelOptions(2000)
+            {
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleReader = true,
+                SingleWriter = false
+            };
+            _channel = Channel.CreateBounded<(int, int, string, ulong)>(channelOptions);
             
             InitializeRabbitMq();
         }
@@ -141,9 +147,10 @@ namespace ConcurrencyDemo
                     if (msg != null)
                     {
                         // 写入内存 Channel 进行缓冲，带上 DeliveryTag 用于后续 Ack
-                        // TryWrite 是同步的，如果 Channel 满了（虽然这里是 Unbounded）会返回 false
-                        // 对于 Unbounded Channel，TryWrite 总是成功
-                        _channel.Writer.TryWrite((msg.Id, msg.Qty, msg.TransactionId, ea.DeliveryTag));
+                        // 有界 Channel 满时会等待，形成背压，避免内存无限膨胀
+                        await _channel.Writer.WriteAsync(
+                            (msg.Id, msg.Qty, msg.TransactionId, ea.DeliveryTag),
+                            stoppingToken);
                     }
                     else
                     {

@@ -25,7 +25,7 @@ graph TD
         subgraph "Async Worker (StockSyncService)"
             Channel -->|Consume Batch| Processor[Batch Processor]
             Processor -->|3. Idempotency Check (SETNX)| Redis
-            Processor -->|4. Batch Write (Transaction)| DB[(SQLite)]
+        Processor -->|4. Batch Write (Transaction)| DB[(SQL Server)]
         end
         
         %% 监控埋点
@@ -77,7 +77,7 @@ graph TD
 2.  **Redis**: Lua 脚本瞬间完成内存扣减，返回成功/失败。
 3.  **Response**: API 立即返回给用户（低延迟）。
 4.  **Async**: 扣减成功的消息被丢入 Channel。
-5.  **Persist**: 后台线程批量获取消息 -> Redis 去重 -> 合并 SQL -> 写入 SQLite。
+5.  **Persist**: 后台线程批量获取消息 -> Redis 去重 -> 合并 SQL -> 写入 SQL Server。
 
 ## 知识点思维导图
 
@@ -90,7 +90,7 @@ mindmap
         减少网络RTT
       异步削峰
         Channel 内存缓冲
-        批量写入 SQLite
+        批量写入 SQL Server
     可靠性保障
       幂等性 (Idempotency)
         Redis SETNX 去重
