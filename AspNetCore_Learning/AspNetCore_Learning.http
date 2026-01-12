@@ -1,6 +1,30 @@
 @AspNetCore_Learning_HostAddress = http://localhost:5244
 
+### 1. 获取天气预报 (GET)
 GET {{AspNetCore_Learning_HostAddress}}/weatherforecast/
 Accept: application/json
 
 ###
+
+### 2. 添加天气预报 (POST - 正常数据)
+POST {{AspNetCore_Learning_HostAddress}}/weatherforecast/
+Content-Type: application/json
+
+{
+    "date": "2026-05-01",
+    "temperatureC": 25,
+    "summary": "Warm"
+}
+
+###
+
+### 3. 添加天气预报 (POST - 验证失败)
+# 这个请求应该返回 400 Bad Request，因为温度超出了 -100 到 100 的范围
+POST {{AspNetCore_Learning_HostAddress}}/weatherforecast/
+Content-Type: application/json
+
+{
+    "date": "2026-05-01",
+    "temperatureC": 999,
+    "summary": "Too Hot"
+}

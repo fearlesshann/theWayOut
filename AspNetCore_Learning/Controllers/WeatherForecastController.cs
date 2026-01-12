@@ -27,4 +27,15 @@ public class WeatherForecastController : ControllerBase
         // 委托给 Service 处理
         return _weatherService.GetForecasts();
     }
+
+    [HttpPost]
+    public IActionResult Create([FromBody] CreateWeatherForecastDto dto)
+    {
+        _logger.LogInformation("接收到添加天气请求: {Date}, {Temp}C", dto.Date, dto.TemperatureC);
+        
+        _weatherService.AddForecast(dto);
+        
+        // 返回 201 Created，并在响应头中包含获取资源的 URL (虽然我们这里列表页没有 ID，暂时指向列表页)
+        return CreatedAtRoute("GetWeatherForecast", null, dto);
+    }
 }
