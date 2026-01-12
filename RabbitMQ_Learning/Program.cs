@@ -19,7 +19,7 @@ namespace RabbitMQ_Learning
 
             // 第二章：Work Queues (工作队列)
             // 目标：学习竞争消费者模式、手动 Ack、Prefetch (公平分发)
-            await Chapter2_WorkQueues.Run();
+            // await Chapter2_WorkQueues.Run();
 
             // --- 第二阶段：交换机与路由 ---
 
@@ -34,6 +34,16 @@ namespace RabbitMQ_Learning
             // 第五章：Topics (主题模式)
             // 目标：学习 Topic 交换机 (通配符匹配)
             // await Chapter5_Topics.Run();
+
+            // --- 第三阶段：高级特性 ---
+
+            // 第六章：Dead Letter Exchange (死信队列)
+            // 目标：学习处理被拒绝的消息 (Nack + Requeue=False)
+            // await Chapter6_DLX.Run();
+
+            // 第七章：TTL + DLX (延时队列)
+            // 目标：学习利用消息过期实现延时任务 (如订单超时取消)
+            await Chapter7_TTL_Delay.Run();
         }
     }
 }

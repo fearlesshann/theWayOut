@@ -27,7 +27,7 @@ namespace RabbitMQ_Learning
             await StartSubscriber(connection, "核心模块监控", "kern.*");
             
             // 订阅者 2: 关心所有严重错误 (*.critical)
-            await StartSubscriber(connection, "严重错误报警", "*.critical");
+            await StartSubscriber(connection, "严重错误报警", "#.critical");
             
             // 订阅者 3: 关心所有日志 (#)
             await StartSubscriber(connection, "全量日志归档", "#");
@@ -38,7 +38,7 @@ namespace RabbitMQ_Learning
                 "kern.info", 
                 "kern.critical", 
                 "auth.info", 
-                "auth.critical" 
+                "a.auth.critical" 
             };
 
             foreach (var key in routingKeys)
