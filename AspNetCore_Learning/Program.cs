@@ -23,6 +23,10 @@ builder.Services.AddDbContext<WeatherContext>(options =>
 builder.Services.Configure<WeatherSettings>(builder.Configuration.GetSection("WeatherSettings"));
 
 builder.Services.AddScoped<IWeatherService, WeatherService>(); // 注册自定义服务
+
+// 注册后台任务
+builder.Services.AddHostedService<WeatherBackgroundWorker>();
+
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
 
