@@ -1,8 +1,26 @@
+# Trae & IDE
 /.trae
 /.vscode
-/ConcurrencyDemo/bin
-/ConcurrencyDemo/obj
-/RabbitMQ_Learning/bin
-/RabbitMQ_Learning/obj
-/AspNetCore_Learning/bin
-/AspNetCore_Learning/obj
+.vs/
+*.user
+*.suo
+
+# .NET Build results (通用规则，不用每个项目写一遍)
+[Bb]in/
+[Oo]bj/
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Frontend
+node_modules/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
