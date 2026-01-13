@@ -2,6 +2,8 @@ namespace AspNetCore_Learning.Models;
 
 public class WeatherForecast
 {
+    public int Id { get; set; } // 新增主键
+
     public DateOnly Date { get; set; }
 
     public int TemperatureC { get; set; }

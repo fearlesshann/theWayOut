@@ -1,40 +1,51 @@
+using AspNetCore_Learning.Data;
 using AspNetCore_Learning.Models;
+using Microsoft.Extensions.Options;
 
 namespace AspNetCore_Learning.Services;
 
 public class WeatherService : IWeatherService
 {
-    private static readonly string[] Summaries = new[]
-    {
-        "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-    };
+    private readonly WeatherSettings _settings;
+    private readonly WeatherContext _context; // 注入 DbContext
 
-    // 内存存储：使用 List 模拟数据库
-    // 注意：因为 WeatherService 是 Scoped (每次请求新建)，所以这个 List 如果是实例字段，每次请求都会重置！
-    // 为了演示“添加后能查到”，我必须把它改成 static，或者把 Service 注册为 Singleton。
-    // 这里为了简单，我先把 List 改成 static。
-    private static readonly List<WeatherForecast> _forecasts = new();
-
-    static WeatherService()
+    public WeatherService(IOptions<WeatherSettings> options, WeatherContext context)
     {
-        // 初始化一些假数据
-        var initialData = Enumerable.Range(1, 5).Select(index => new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            Summaries[Random.Shared.Next(Summaries.Length)]
-        ));
-        _forecasts.AddRange(initialData);
+        _settings = options.Value;
+        _context = context;
     }
 
     public IEnumerable<WeatherForecast> GetForecasts()
     {
-        return _forecasts;
+        // 从数据库查询所有数据
+        // 注意：EF Core 查询出来的对象是实体，如果要修改它（比如拼接城市名），
+        // 最好先转成 List 或者 DTO，以免污染数据库上下文中的追踪状态（虽然这里只是读，没关系）
+        var forecasts = _context.Forecasts.ToList();
+
+        // 演示配置读取
+        foreach (var f in forecasts)
+        {
+            if (f.Summary != null && !f.Summary.Contains(_settings.DefaultCity))
+            {
+                f.Summary += $" ({_settings.DefaultCity})";
+            }
+        }
+        return forecasts;
     }
 
     public void AddForecast(CreateWeatherForecastDto dto)
     {
+        // 校验逻辑
+        if (dto.TemperatureC > _settings.MaxTemperature || dto.TemperatureC < _settings.MinTemperature)
+        {
+            if (dto.TemperatureC > _settings.MaxTemperature) dto.TemperatureC = _settings.MaxTemperature;
+            if (dto.TemperatureC < _settings.MinTemperature) dto.TemperatureC = _settings.MinTemperature;
+        }
+
         var forecast = new WeatherForecast(dto.Date, dto.TemperatureC, dto.Summary);
-        _forecasts.Add(forecast);
+        
+        // 写入数据库
+        _context.Forecasts.Add(forecast);
+        _context.SaveChanges(); // 必须调用，否则不会写入
     }
 }
