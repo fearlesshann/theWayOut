@@ -4,6 +4,6 @@ namespace AspNetCore_Learning.Services;
 
 public interface IWeatherService
 {
-    IEnumerable<WeatherForecast> GetForecasts();
+    PagedResult<WeatherForecast> GetForecasts(int page, int pageSize);
     void AddForecast(CreateWeatherForecastDto forecast);
 }

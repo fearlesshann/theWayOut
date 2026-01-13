@@ -3,6 +3,7 @@ using AspNetCore_Learning.Filters;
 using AspNetCore_Learning.Middleware;
 using AspNetCore_Learning.Models;
 using AspNetCore_Learning.Services;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -22,10 +23,23 @@ builder.Services.AddDbContext<WeatherContext>(options =>
 // 这行代码会自动读取 appsettings.json 中的 "WeatherSettings" 节点
 builder.Services.Configure<WeatherSettings>(builder.Configuration.GetSection("WeatherSettings"));
 
+// 注册 MassTransit
+builder.Services.AddMassTransit(x =>
+{
+    // 1. 注册消费者
+    x.AddConsumer<WeatherUpdateConsumer>();
+
+    // 2. 配置总线 (这里使用内存模式 In-Memory，生产环境可改为 UsingRabbitMq)
+    x.UsingInMemory((context, cfg) =>
+    {
+        cfg.ConfigureEndpoints(context);
+    });
+});
+
 builder.Services.AddScoped<IWeatherService, WeatherService>(); // 注册自定义服务
 
 // 注册后台任务
-builder.Services.AddHostedService<WeatherBackgroundWorker>();
+// builder.Services.AddHostedService<WeatherBackgroundWorker>();
 
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();

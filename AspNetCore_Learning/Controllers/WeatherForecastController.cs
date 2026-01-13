@@ -21,11 +21,10 @@ public class WeatherForecastController : ControllerBase
     }
 
     [HttpGet(Name = "GetWeatherForecast")]
-    public IEnumerable<WeatherForecast> Get()
+    public PagedResult<WeatherForecast> Get([FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
-        _logger.LogInformation("正在调用 WeatherService 获取天气数据...");
-        // 委托给 Service 处理
-        return _weatherService.GetForecasts();
+        _logger.LogInformation("正在调用 WeatherService 获取天气数据 (Page {Page})...", page);
+        return _weatherService.GetForecasts(page, pageSize);
     }
 
     [HttpPost]
