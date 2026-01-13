@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 
-namespace AspNetCore_Learning;
+namespace AspNetCore_Learning.Filters;
 
 public class GlobalExceptionFilter : IExceptionFilter
 {

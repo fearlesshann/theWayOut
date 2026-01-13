@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace AspNetCore_Learning;
+namespace AspNetCore_Learning.Middleware;
 
 public class RequestTimingMiddleware
 {
