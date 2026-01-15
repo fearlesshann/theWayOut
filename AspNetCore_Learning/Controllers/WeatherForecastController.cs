@@ -37,4 +37,20 @@ public class WeatherForecastController : ControllerBase
         // 返回 201 Created，并在响应头中包含获取资源的 URL (虽然我们这里列表页没有 ID，暂时指向列表页)
         return CreatedAtRoute("GetWeatherForecast", null, dto);
     }
+
+    [HttpPut]
+    public IActionResult Update([FromBody] UpdateWeatherForecastDto dto)
+    {
+        _logger.LogInformation("接收到更新天气请求: Id {Id}", dto.Id);
+        
+        var success = _weatherService.UpdateForecast(dto);
+        if (!success)
+        {
+            // 如果更新失败，通常意味着发生了并发冲突（或者ID不存在）
+            // 返回 409 Conflict 状态码告诉客户端数据已过时
+            return Conflict(new { message = "当前数据已被其他人修改（并发冲突），请刷新最新数据后重试。" });
+        }
+
+        return NoContent();
+    }
 }

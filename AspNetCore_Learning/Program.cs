@@ -2,6 +2,7 @@ using AspNetCore_Learning.Data;
 using AspNetCore_Learning.Filters;
 using AspNetCore_Learning.Middleware;
 using AspNetCore_Learning.Models;
+using AspNetCore_Learning.Repositories;
 using AspNetCore_Learning.Services;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -37,6 +38,11 @@ builder.Services.AddMassTransit(x =>
 });
 
 builder.Services.AddScoped<IWeatherService, WeatherService>(); // 注册自定义服务
+builder.Services.AddScoped<AnotherWeatherService>(); // 注册用于测试连接的服务
+
+// 注册仓储和服务
+builder.Services.AddScoped<IWeatherForecastRepository, WeatherForecastRepository>();
+builder.Services.AddScoped<RepositoryDemoService>();
 
 // 注册后台任务
 // builder.Services.AddHostedService<WeatherBackgroundWorker>();

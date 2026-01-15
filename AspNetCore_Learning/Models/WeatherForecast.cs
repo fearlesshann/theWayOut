@@ -1,8 +1,13 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace AspNetCore_Learning.Models;
 
 public class WeatherForecast
 {
     public int Id { get; set; } // 新增主键
+
+    [Timestamp]
+    public byte[] RowVersion { get; set; } = null!; // 乐观并发控制令牌
 
     public DateOnly Date { get; set; }
 
